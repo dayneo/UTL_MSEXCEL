@@ -26,6 +26,8 @@ CREATE OR REPLACE package body utl_msexcel as
 
 	procedure write_value(p_hnd in number, p_sheet in number, p_row in number, p_column in number, p_value in varchar2)
 	as language java name 'org.pgwc.oracle.msexcel.MSExcel.WriteString(int, int, int, int, java.lang.String)';
+	procedure write_value(p_hnd in number, p_sheet in number, p_row in number, p_column in number, p_value in number)
+	as language java name 'org.pgwc.oracle.msexcel.MSExcel.WriteDouble(int, int, int, int, double)';
 	procedure write_value(p_hnd in number, p_sheet in number, p_row in number, p_column in number, p_value in date)
 	as language java name 'org.pgwc.oracle.msexcel.MSExcel.WriteAnything(int, int, int, int, Date)';
 	procedure write_dataset(p_hnd in number, p_sheet in number, p_row in number, p_column in number, p_dataset in clob)

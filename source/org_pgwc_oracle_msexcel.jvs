@@ -276,6 +276,61 @@ public class MSExcel
 		workbook.setSheetName(sheetIndex, sheetName);
 	}
 
+	public static void WriteString
+	(
+		int hnd,
+		int sheetNo,
+		int rowIndex,
+		int colIndex,
+		java.lang.String value
+	) throws Exception
+	{
+		Integer i = new Integer(hnd);
+		HSSFWorkbook workbook = (HSSFWorkbook)_workbooks.get(i.toString());
+		HSSFSheet worksheet = workbook.getSheetAt(sheetNo);
+
+		//
+		// locate the cell and write the string
+		//
+		HSSFRow row = worksheet.getRow((short)rowIndex);
+		if (row == null) row = worksheet.createRow((short)rowIndex);
+		HSSFCell cell = row.getCell((short)colIndex);
+		if (cell == null) cell = row.createCell((short)colIndex);
+		cell.setCellValue(value);
+
+		// ReCalculateAllFormulas(workbook);
+	}
+
+	public static void WriteDouble
+	(
+		int hnd,
+		int sheetNo,
+		int rowIndex,
+		int colIndex,
+		double value
+	) throws Exception
+	{
+		//
+		// Open the worksheet
+		//
+		Integer i = new Integer(hnd);
+		HSSFWorkbook workbook = (HSSFWorkbook)_workbooks.get(i.toString());
+		HSSFSheet worksheet = workbook.getSheetAt(sheetNo);
+
+		//
+		// locate the cell and write the string
+		//
+		HSSFRow row = worksheet.getRow((short)rowIndex);
+		if (row == null) row = worksheet.createRow((short)rowIndex);
+		HSSFCell cell = row.getCell((short)colIndex);
+		if (cell == null) cell = row.createCell((short)colIndex);
+
+		cell.setCellType(HSSFCell.CELL_TYPE_NUMERIC);
+		cell.setCellValue(value);
+
+		// ReCalculateAllFormulas(workbook);
+	}
+
 	private static void WriteDate
 	(
 		int hnd,
@@ -302,31 +357,6 @@ public class MSExcel
 		HSSFCellStyle cellStyle = workbook.createCellStyle();
 		cellStyle.setDataFormat(HSSFDataFormat.getBuiltinFormat("m/d/yy h:mm"));
 		cell.setCellStyle(cellStyle);
-		cell.setCellValue(value);
-
-		// ReCalculateAllFormulas(workbook);
-	}
-
-	public static void WriteString
-	(
-		int hnd,
-		int sheetNo,
-		int rowIndex,
-		int colIndex,
-		java.lang.String value
-	) throws Exception
-	{
-		Integer i = new Integer(hnd);
-		HSSFWorkbook workbook = (HSSFWorkbook)_workbooks.get(i.toString());
-		HSSFSheet worksheet = workbook.getSheetAt(sheetNo);
-
-		//
-		// locate the cell and write the string
-		//
-		HSSFRow row = worksheet.getRow((short)rowIndex);
-		if (row == null) row = worksheet.createRow((short)rowIndex);
-		HSSFCell cell = row.getCell((short)colIndex);
-		if (cell == null) cell = row.createCell((short)colIndex);
 		cell.setCellValue(value);
 
 		// ReCalculateAllFormulas(workbook);
