@@ -1,0 +1,392 @@
+CREATE OR REPLACE AND RESOLVE JAVA SOURCE NAMED "org/pgwc/oracle/msexcel" AS
+//
+// Writes to excel workbook at a given row and column position using Apache poi (HSSF) library
+//
+package org.pgwc.oracle.msexcel;
+
+import java.io.*;
+import java.sql.*;
+import java.lang.*;
+import java.util.*;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import oracle.sql.*;
+import oracle.jdbc.driver.*;
+import org.apache.poi.hssf.usermodel.*;
+import org.apache.poi.poifs.filesystem.*;
+import org.xml.sax.*;
+import org.xml.sax.helpers.*;
+import org.xml.sax.helpers.DefaultHandler;
+
+public class SAXDatasetHandler extends DefaultHandler
+{
+	public HSSFSheet worksheet;
+	public int rowIndex = 0;
+	public int colIndex = 0;
+
+	private int rowi = 0;
+	private int coli = 0;
+	private HSSFRow row;
+	private HSSFCell cell;
+	private boolean incolumn = false;
+	private String colvalue = "";
+
+	public void startElement(String namespaceURI, String localName, String qualifiedName, Attributes atts) throws SAXException
+	{
+		colvalue = "";
+		if (localName == "ROWSET")
+		{
+			//
+			// beginning of dataset, so setup variables
+			//
+			rowi = rowIndex;
+			coli = colIndex;
+
+			row = worksheet.getRow((short)rowi);
+			if (row == null) row = worksheet.createRow((short)rowi);
+			cell = row.getCell((short)coli);
+			if (cell == null) cell = row.createCell((short)coli);
+		}
+		else if (localName == "ROW")
+		{
+			//
+			// a new row was found so create a new row
+			//
+			row = worksheet.getRow((short)rowi);
+			if (row == null) row = worksheet.createRow((short)rowi);
+		}
+		else
+		{
+			//
+			// the node is a column. get the relevant cell
+			//
+			incolumn = true;
+			cell = row.getCell((short)coli);
+			if (cell == null) cell = row.createCell((short)coli);
+		}
+	}
+
+	public void endElement(String namespaceURI, String localName, String qualifiedName) throws SAXException
+	{
+		if (localName == "ROWSET")
+		{
+			//
+			// end of dataset, nothing to do
+			//
+		}
+		if (localName == "ROW")
+		{
+			//
+			// end of the row. Reset values
+			//
+			rowi++;
+			coli = colIndex;
+			row = null;
+			// cell = null;
+		}
+		else
+		{
+			//
+			// end of column. value should have been read, now write the value
+			//
+			try
+			{
+				//
+				// test for numeric
+				//
+				double dblvalue = Double.parseDouble(colvalue);
+				cell.setCellType(HSSFCell.CELL_TYPE_NUMERIC);
+				cell.setCellValue(dblvalue);
+			}
+			catch (Exception e)
+			{
+				try
+				{
+					//
+					// test for date
+					//
+					SimpleDateFormat formatter = new SimpleDateFormat("yyyy-MM-dd'T'hh:mm:ss");
+					java.util.Date datevalue = formatter.parse(colvalue);
+
+					cell.setCellValue(datevalue);
+				}
+				catch (Exception es)
+				{
+					//
+					// write cell as string
+					//
+					cell.setCellValue(colvalue);
+				}
+			}
+
+			// colvalue += "-" + localName; // debug code
+			// cell.setCellValue(colvalue);
+
+			//colvalue = "";
+			// cell = null;
+			coli++;
+			incolumn = false;
+		}
+	}
+
+	public void characters(char[] ch, int start, int length) throws SAXException
+	{
+		if (incolumn)
+		{
+			for (int i = start; i < (start + length); i++) colvalue += ch[i];
+		}
+	}
+}
+
+public class MSExcel
+{
+	private static java.util.Hashtable _workbooks = new java.util.Hashtable();
+
+	private static void ReCalculateAllFormulas(HSSFWorkbook workbook) throws Exception
+	{
+		int noOfSheets = workbook.getNumberOfSheets();
+		for (int sheetNum = 0; sheetNum < noOfSheets; sheetNum++)
+		{
+			HSSFSheet sheet = workbook.getSheetAt(sheetNum);
+			HSSFFormulaEvaluator evaluator = new HSSFFormulaEvaluator(sheet, workbook);
+
+			for (Iterator rit = sheet.rowIterator(); rit.hasNext();)
+			{
+				HSSFRow r = (HSSFRow)rit.next();
+				evaluator.setCurrentRow(r);
+
+				for (Iterator cit = r.cellIterator(); cit.hasNext();)
+				{
+					HSSFCell c = (HSSFCell)cit.next();
+					if (c.getCellType() == HSSFCell.CELL_TYPE_FORMULA) evaluator.evaluateFormulaCell(c);
+				}
+			}
+		}
+	}
+
+	private static int AllocateKey() throws Exception
+	{
+		int key;
+		Integer i;
+
+		do
+		{
+			double d = Math.random();
+			key = Math.round((float)d * 64000);
+			i = new Integer(key);
+		}
+		while (_workbooks.containsKey(i.toString()));
+
+		HSSFWorkbook workbook = new HSSFWorkbook();
+		_workbooks.put(i.toString(), workbook);
+
+		return key;
+	}
+
+	private static int AllocateKey(POIFSFileSystem fs) throws Exception
+	{
+		int key;
+		Integer i;
+
+		do
+		{
+			double d = Math.random();
+			key = Math.round((float)d * 64000);
+			i = new Integer(key);
+		}
+		while (_workbooks.containsKey(i.toString()));
+
+		HSSFWorkbook workbook = new HSSFWorkbook(fs);
+		_workbooks.put(i.toString(), workbook);
+
+		return key;
+	}
+
+	public static int NewWorkbook() throws Exception
+	{
+		int i = AllocateKey();
+		Integer hnd = new Integer(i);
+		HSSFWorkbook workbook = (HSSFWorkbook)_workbooks.get(hnd.toString());
+		int s;
+		s = AddSheet(i);
+		s = AddSheet(i);
+		s = AddSheet(i);
+		return i;
+	}
+
+	public static int OpenWorkbook(oracle.sql.BLOB file) throws Exception
+	{
+		InputStream inStream = file.getBinaryStream();
+		POIFSFileSystem fs = new POIFSFileSystem(inStream);
+		int hnd = AllocateKey(fs);
+		inStream.close();
+
+		// force formula calculation
+		Integer key = new Integer(hnd);
+		HSSFWorkbook workbook = (HSSFWorkbook)_workbooks.get(key.toString());
+		int noOfSheets = workbook.getNumberOfSheets();
+		for (int sheetNum = 0; sheetNum < noOfSheets; sheetNum++)
+		{
+			HSSFSheet sheet = workbook.getSheetAt(sheetNum);
+			// sheet.setForceFormulaRecalculation(true);
+		}
+
+		return hnd;
+	}
+
+	public static int SheetCount(int hnd) throws Exception
+	{
+		Integer i = new Integer(hnd);
+		HSSFWorkbook workbook = (HSSFWorkbook)_workbooks.get(i.toString());
+		return workbook.getNumberOfSheets();
+	}
+
+	public static int AddSheet(int hnd) throws Exception
+	{
+		Integer i = new Integer(hnd);
+		HSSFWorkbook workbook = (HSSFWorkbook)_workbooks.get(i.toString());
+		int noOfSheets = workbook.getNumberOfSheets();
+		HSSFSheet worksheet = workbook.createSheet();
+		Integer sheetNo = new Integer(noOfSheets + 1);
+		workbook.setSheetName(noOfSheets, "Sheet" + sheetNo.toString());
+		// worksheet.setForceFormulaRecalculation(true);
+		return noOfSheets;
+	}
+
+	public static void RemoveSheet(int hnd, int sheetIndex) throws Exception
+	{
+		Integer i = new Integer(hnd);
+		HSSFWorkbook workbook = (HSSFWorkbook)_workbooks.get(i.toString());
+		workbook.removeSheetAt(sheetIndex);
+	}
+
+	public static int CloneSheet(int hnd, int sheetIndex) throws Exception
+	{
+		Integer i = new Integer(hnd);
+		HSSFWorkbook workbook = (HSSFWorkbook)_workbooks.get(i.toString());
+		HSSFSheet worksheet = workbook.cloneSheet(sheetIndex);
+		int noOfSheets = workbook.getNumberOfSheets();
+		return noOfSheets;
+	}
+
+	public static void SetSheetName(int hnd, int sheetIndex, String sheetName) throws Exception
+	{
+		Integer i = new Integer(hnd);
+		HSSFWorkbook workbook = (HSSFWorkbook)_workbooks.get(i.toString());
+		workbook.setSheetName(sheetIndex, sheetName);
+	}
+
+	private static void WriteDate
+	(
+		int hnd,
+		int sheetNo,
+		int rowIndex,
+		int colIndex,
+		Date value
+	) throws Exception
+	{
+		//
+		// Open the worksheet
+		//
+		Integer i = new Integer(hnd);
+		HSSFWorkbook workbook = (HSSFWorkbook)_workbooks.get(i.toString());
+		HSSFSheet worksheet = workbook.getSheetAt(sheetNo);
+
+		//
+		// locate the cell and write the string
+		//
+		HSSFRow row = worksheet.getRow((short)rowIndex);
+		if (row == null) row = worksheet.createRow((short)rowIndex);
+		HSSFCell cell = row.getCell((short)colIndex);
+		if (cell == null) cell = row.createCell((short)colIndex);
+		HSSFCellStyle cellStyle = workbook.createCellStyle();
+		cellStyle.setDataFormat(HSSFDataFormat.getBuiltinFormat("m/d/yy h:mm"));
+		cell.setCellStyle(cellStyle);
+		cell.setCellValue(value);
+
+		// ReCalculateAllFormulas(workbook);
+	}
+
+	public static void WriteString
+	(
+		int hnd,
+		int sheetNo,
+		int rowIndex,
+		int colIndex,
+		java.lang.String value
+	) throws Exception
+	{
+		Integer i = new Integer(hnd);
+		HSSFWorkbook workbook = (HSSFWorkbook)_workbooks.get(i.toString());
+		HSSFSheet worksheet = workbook.getSheetAt(sheetNo);
+
+		//
+		// locate the cell and write the string
+		//
+		HSSFRow row = worksheet.getRow((short)rowIndex);
+		if (row == null) row = worksheet.createRow((short)rowIndex);
+		HSSFCell cell = row.getCell((short)colIndex);
+		if (cell == null) cell = row.createCell((short)colIndex);
+		cell.setCellValue(value);
+
+		// ReCalculateAllFormulas(workbook);
+	}
+
+	public static oracle.sql.BLOB SaveWorkbook(int hnd) throws Exception
+	{
+		Integer i = new Integer(hnd);
+		HSSFWorkbook workbook = (HSSFWorkbook)_workbooks.get(i.toString());
+
+		Connection conn = new OracleDriver().defaultConnection();
+		oracle.sql.BLOB file = oracle.sql.BLOB.createTemporary(conn, false, oracle.sql.BLOB.DURATION_CALL);
+		OutputStream outstream = file.getBinaryOutputStream();
+		workbook.write(outstream);
+		outstream.close();
+		return file;
+	}
+
+	public static void FreeWorkbook(int hnd) throws Exception
+	{
+		Integer i = new Integer(hnd);
+		Object obj = _workbooks.remove(i.toString());
+	}
+
+	//
+	// writeXmlDataset: writes an Oracle XML Dataset to an excel file
+	//
+	public static void writeXmlDataset
+	(
+		int hnd,
+		int sheetNo,
+		int rowstart,
+		int colstart,
+		oracle.sql.CLOB xmlDataset
+	) throws Exception
+	{
+		//
+		// Select the sheet on which the data will be placed
+		//
+		Integer i = new Integer(hnd);
+		HSSFWorkbook workbook = (HSSFWorkbook)_workbooks.get(i.toString());
+		HSSFSheet worksheet = workbook.getSheetAt(sheetNo);
+
+		//
+		// populate the worksheet using SAX
+		//
+		SAXDatasetHandler sdh = new SAXDatasetHandler();
+		sdh.worksheet = worksheet;
+		sdh.rowIndex = rowstart;
+		sdh.colIndex = colstart;
+		XMLReader parser = XMLReaderFactory.createXMLReader("oracle.xml.parser.v2.SAXParser");
+		parser.setContentHandler((ContentHandler)sdh);
+		InputStream xmlStream = xmlDataset.getAsciiStream();
+		InputSource source = new InputSource(xmlStream);
+		parser.parse(source);
+		xmlStream.close();
+
+		// ReCalculateAllFormulas(workbook);
+	}
+}
+/
+
+SHOW ERRORS
