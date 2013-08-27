@@ -331,7 +331,7 @@ public class MSExcel
 		// ReCalculateAllFormulas(workbook);
 	}
 
-	private static void WriteDate
+	public static void WriteDate
 	(
 		int hnd,
 		int sheetNo,
