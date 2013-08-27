@@ -22,6 +22,7 @@ CREATE OR REPLACE package utl_msexcel as
 	-- Write a value to a specified cell
 	--
 	procedure write_value(p_hnd in number, p_sheet in number, p_row in number, p_column in number, p_value in varchar2);
+	procedure write_value(p_hnd in number, p_sheet in number, p_row in number, p_column in number, p_value in number);
 	procedure write_value(p_hnd in number, p_sheet in number, p_row in number, p_column in number, p_value in date);
 	
 	-- Note dates must be formatted as 'yyyy-mm-dd"T"hh24:mi:ss'
