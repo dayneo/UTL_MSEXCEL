@@ -301,7 +301,7 @@ public class MSExcel
 		// ReCalculateAllFormulas(workbook);
 	}
 
-	private static void WriteDouble
+	public static void WriteDouble
 	(
 		int hnd,
 		int sheetNo,
